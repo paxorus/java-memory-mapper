@@ -9,6 +9,8 @@ public class MyFileSystem implements FileSystem {
     public FileTable  fileTable  = new FileTable();
     public SuperBlock superBlock = new SuperBlock();
     public FreeMap    freeMap;
+    
+    private int indexInParent;
 
     /**
      * Reading from or writing to a file.
@@ -168,9 +170,10 @@ public class MyFileSystem implements FileSystem {
         if(! fileDescriptorIsValid(fd))
             return -1;
 
-        DirectBlock block;
         int len, off = 0;
         for(off = 0; off < buffer.length; off += len) {
+//            DirectBlock block = getDirectBlock(fd, MODE.w);
+        	DirectBlock block;
             if((block = getDirectBlock(fd, MODE.w)) == null) {
                 System.err.println("File system is full");
                 return -1;
@@ -248,9 +251,11 @@ public class MyFileSystem implements FileSystem {
         // the inode pointers, they are cleared when allocating a new
         // file.
         //
-        for(int i = 0; i < inode.ptr.length; ++i)
-            if(inode.ptr[i] != 0)
-                freeMap.clear(inode.ptr[i]);
+        for(int i = 0; i < inode.size(); i ++) {
+            if(inode.get(i) != 0) {
+                freeMap.clear(inode.get(i));
+            }
+    }
         freeMap.save();
 
         // Mark the inode as free and write it to disk.
@@ -324,22 +329,85 @@ public class MyFileSystem implements FileSystem {
         int blockNum  = seekPtr / Disk.BLOCK_SIZE;
         int blockOff  = seekPtr % Disk.BLOCK_SIZE;
         
-        if(blockNum > 9) {
-            System.err.println("Large files unsupported");
-            System.exit(1);
+        Nestable nestable;
+        try {
+        	nestable = followRedirects(inode, blockNum);
+        } catch (RuntimeException rex) {
+        	return null;
         }
-        boolean fresh = inode.ptr[blockNum] == 0;
+        int directAddress = nestable.get(indexInParent);
+        boolean isHole = directAddress == 0;
 
         // The blockNum is a logical block number referring to a
         // pointer in the inode.
 
-        if(fresh)
-            if(mode == MODE.r)
-                return DirectBlock.hole;
-            else if((inode.ptr[blockNum] = freeMap.find()) == 0)
-                return null;
-        return new DirectBlock(disk, inode.ptr[blockNum], blockOff, fresh);
-
+        if (isHole && mode == MODE.r) {
+        	return DirectBlock.hole;
+        }
+        
+        if (isHole) {
+        	directAddress = freeMap.find();
+        	if (directAddress == 0) {
+        		return null;
+        	}
+        	nestable.set(indexInParent, directAddress);
+        }
+        // return DirectBlock for allocated hole or preexisting data block
+        return new DirectBlock(disk, nestable.get(indexInParent), blockOff, isHole);
+    }
+    
+    
+    // if no indirection: return ptr[blockNum]
+    /**
+     * Follow redirects to convert (inode, blockNum) -> (nestable, indexInParent)
+     * 
+     * @param inode
+     * @param blockNum
+     * @return
+     */
+    public Nestable followRedirects(Inode inode, int blockNum) {
+    	if (blockNum < Inode.LIMITS[0]) {
+    		this.indexInParent = blockNum;
+    		return inode;
+    	}
+    	if (blockNum < Inode.LIMITS[1]) {
+    		int normNum = blockNum - Inode.LIMITS[0];// in [0, COUNT)
+    		IndirectBlock first = getIndirectBlock(inode, 10);
+    		this.indexInParent = normNum;
+    		return first;
+    	}
+    	if (blockNum < Inode.LIMITS[2]) {
+    		int normNum = blockNum - Inode.LIMITS[1];// in [0, COUNT^2)
+    		IndirectBlock first = getIndirectBlock(inode, 11);
+    		IndirectBlock second = getIndirectBlock(first, normNum / IndirectBlock.COUNT);
+    		this.indexInParent = normNum % IndirectBlock.COUNT;
+    		return second;
+    	}
+    	if (blockNum < Inode.LIMITS[3]) {
+    		int normNum = blockNum - Inode.LIMITS[2];// in [0, COUNT^3)
+    		IndirectBlock first = getIndirectBlock(inode, 12);
+    		IndirectBlock second = getIndirectBlock(first, normNum / (int) Math.pow(IndirectBlock.COUNT, 2));
+    		IndirectBlock third = getIndirectBlock(second, normNum / IndirectBlock.COUNT);
+    		this.indexInParent = normNum % IndirectBlock.COUNT;
+    		return third;
+    	}
+    	throw new RuntimeException("Large files unsupported");
+    }
+    
+    /**
+     * Follow a redirect and return an IndirectBlock at that pointer, allocating a new block if necessary
+     * 
+     * @param parent - the IndirectBlock or Inode providing the pointer
+     * @param index - the index of the pointer in parent.ptr[]
+     * @return an IndirectBlock
+     */
+    private IndirectBlock getIndirectBlock(Nestable parent, int index) {
+    	boolean fresh = parent.get(index) == 0;
+    	if (fresh) {
+    		// parent must point to new block
+    		parent.set(index, freeMap.find());
+    	}
+    	return new IndirectBlock(disk, parent.get(index), fresh);
     }
 
     /**

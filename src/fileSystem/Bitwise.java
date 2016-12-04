@@ -14,6 +14,7 @@ public class Bitwise {
      * set, false otherwise.
      */
     public static boolean isset(int i, byte b) {//FIXME!!!
+    	return (b & bitmasks[i]) > 0;
     }
 
     /**
@@ -21,24 +22,34 @@ public class Bitwise {
      * it is set, false otherwise.
      */
     public static boolean isset(int i, byte bytes[]) {//FIXME!!!
+    	int j = bytes.length * 8 - i - 1;
+    	int row = j / 8;
+		int col = 7 - j % 8;
+		return isset(col, bytes[row]);
     }
 
     /**
      * Set bit i in byte and return the new byte.
      */
     public static byte set(int i, byte b) {//FIXME!!!
+    	return (byte) (bitmasks[i] | b);
     }
 
     /**
      * Set bit i in array of bytes.
      */
     public static void set(int i, byte bytes[]) {//FIXME!!!
+    	int j = bytes.length * 8 - i - 1;
+    	int row = j / 8;
+    	int col = 7 - j % 8;
+    	bytes[row] = set(col, bytes[row]);
     }
 
     /**
      * Clear bit i in byte and return the new byte.
      */
     public static byte clear(int i, byte b) {//FIXME!!!
+    	return (byte) (~bitmasks[i] & b);
     }
 
     /**
@@ -46,6 +57,12 @@ public class Bitwise {
      * before clearing, false otherwise.
      */
     public static boolean clear(int i, byte bytes[]) {//FIXME!!!
+    	int j = bytes.length * 8 - i - 1;
+    	int row = j / 8;
+		int col = 7 - j % 8;
+		boolean wasSet = isset(col, bytes[row]);
+		bytes[row] = clear(col, bytes[row]);
+		return wasSet;
     }
 
     /**
@@ -65,6 +82,11 @@ public class Bitwise {
      * "0" if it is clear, "1" if it is set.
      */
     public static String toString(byte b) {//FIXME!!!
+    	String repr = "";
+    	for (int i = 7; i >= 0; i --) {
+    		repr += isset(i, b) ? '1' : '0';
+    	}
+    	return repr;
     }
 
     /**
@@ -74,7 +96,7 @@ public class Bitwise {
      */
     public static String toString(byte bytes[], String sep,
                                   String lsep, int every) {
-        String s = "";
+        String s = "";        
         for(int i = bytes.length * 8 - 1; i >= 0; --i) {
         	s += isset(i, bytes) ? "1" : "0";
         	if(i > 0)

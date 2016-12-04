@@ -116,7 +116,7 @@ public class Disk {
 				block.inodes[i].owner = disk.readInt();
 				block.inodes[i].size = disk.readInt();
 				for(int j=0; j<13; j++) {
-					block.inodes[i].ptr[j] = disk.readInt();
+					block.inodes[i].set(j, disk.readInt());
 				}
 			}
 		} catch(IOException e) {
@@ -234,7 +234,7 @@ public class Disk {
 				disk.writeInt(block.inodes[i].owner);
 				disk.writeInt(block.inodes[i].size);
 				for(int j=0; j<13; j++) {
-					disk.writeInt(block.inodes[i].ptr[j]);
+					disk.writeInt(block.inodes[i].get(j));
 				}
 			}
 		} catch(IOException e) {

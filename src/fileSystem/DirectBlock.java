@@ -61,7 +61,7 @@ public class DirectBlock {
     private int blockOff;
     private boolean fresh;
     private boolean inCore = false;
-    private boolean dirty  = false;
+//    private boolean dirty  = false;
 
     private DirectBlock() {
         // Constructs a hole
@@ -89,7 +89,7 @@ public class DirectBlock {
         int i = 0;
         for(; i + off < buf.length && i + blockOff < Disk.BLOCK_SIZE; ++i)
             block[blockOff + i] = buf[off + i];
-        dirty = true;
+//        dirty = true;
         return i;
     }
 
@@ -106,6 +106,6 @@ public class DirectBlock {
     public void save() {
         if(disk != null)
             disk.write(blockNum, block);
-        dirty = false;
+//        dirty = false;
     }
 }
